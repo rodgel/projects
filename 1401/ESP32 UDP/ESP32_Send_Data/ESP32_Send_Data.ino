@@ -2,18 +2,28 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+// #include <ESP32DMASPISlave.h>
+
+// ESP32DMASPI::Slave slave;
+
+// static const uint32_t BUFFER_SIZE = 24;
+// uint8_t* spi_slave_tx_buf;
+// uint8_t* spi_slave_rx_buf;
+
 #include <ESP32SPISlave.h>
 
 ESP32SPISlave slave;
+
+static constexpr uint32_t BUFFER_SIZE {3000};
+uint8_t spi_slave_tx_buf[BUFFER_SIZE];
+uint8_t spi_slave_rx_buf[BUFFER_SIZE];
+
 
 // the IP of the machine to which you send msgs - this should be the correct IP in most cases (see note in python code)
 #define CONSOLE_IP "192.168.1.2"
 #define CONSOLE_PORT 4210
 #define LED 2
 
-static constexpr uint32_t BUFFER_SIZE {32};
-uint8_t spi_slave_tx_buf[BUFFER_SIZE];
-uint8_t spi_slave_rx_buf[BUFFER_SIZE];
 
 
 const char* ssid = "ESP32";
@@ -36,27 +46,99 @@ void setup()
 //  WiFi.softAPConfig(local_ip, gateway, subnet);
 //  server.begin();
 
+    // to use DMA buffer, use these methods to allocate buffer
+    // spi_slave_tx_buf = slave.allocDMABuffer(BUFFER_SIZE);
+    // spi_slave_rx_buf = slave.allocDMABuffer(BUFFER_SIZE);
 
-
-
-    pinMode(LED, OUTPUT);
-      // begin() after setting
-    // HSPI = CS: 15, CLK: 14, MOSI: 13, MISO: 12 -> default
-    // VSPI = CS:  5, CLK: 18, MOSI: 23, MISO: 19
+    // set buffer data...
+    // set_buffer();
+    // slave device configuration
     slave.setDataMode(SPI_MODE0);
-    //slave.begin(vspi);
-    slave.begin(VSPI);   // you can use VSPI like this
+    // slave.setMaxTransferSize(BUFFER_SIZE);
 
-    // clear buffers
-    memset(spi_slave_tx_buf, 0, BUFFER_SIZE);
-    memset(spi_slave_rx_buf, 0, BUFFER_SIZE);
+    // begin() after setting
+    slave.begin(VSPI);  // HSPI = CS: 15, CLK: 14, MOSI: 13, MISO: 12 -> default
+                    // VSPI (CS:  5, CLK: 18, MOSI: 23, MISO: 19)
+
+    
+    pinMode(LED, OUTPUT);
 
 
 }
 
 void loop()
 {
+
+
+
+  while(0){
+
+    // if there is no transaction in queue, add transaction
+    if (slave.remained() == 0) {
+        slave.queue(spi_slave_rx_buf, spi_slave_tx_buf, BUFFER_SIZE);
+
+        Serial.println("aaaa");
+        Serial.println(slave.remained());
+    }
+
+    // if transaction has completed from master,
+    // available() returns size of results of transaction,
+    // and buffer is automatically updated
+
+    while (slave.available()) {
+        // do something with received data: spi_slave_rx_buf
+
+
+      printf("1th is : %d ", spi_slave_rx_buf[0]);
+      delay(10);
+      printf("2th is : %d ", spi_slave_rx_buf[1]);
+      delay(10);
+
+
+      // Serial.println(spi_slave_rx_buf[0]);
+      // Serial.println(spi_slave_rx_buf[1]);
+      // Serial.println(spi_slave_rx_buf[2]);
+      // Serial.println(spi_slave_rx_buf[3]);
+      // Serial.println(spi_slave_rx_buf[4]);
+     
+
+      slave.pop();
+    }
+
+
+  }
+
+
+
+
   while(1){
+
+
+
+
+
+
+    // if there is no transaction in queue, add transaction
+    if (slave.remained() == 0)
+        slave.queue(spi_slave_rx_buf, spi_slave_tx_buf, BUFFER_SIZE);
+
+    // if transaction has completed from master,
+    // available() returns size of results of transaction,
+    // and `spi_slave_rx_buf` is automatically updated
+    while (slave.available()) {
+        // do something with `spi_slave_rx_buf`
+        // show received data
+         Serial.print("Command Received: ");
+         
+        for(int i=0;i<BUFFER_SIZE;i++){Serial.println(spi_slave_rx_buf[i]);delay(1);}
+        slave.pop();
+        
+    }
+  }
+
+
+
+
 
    // block until the transaction comes from master
     slave.wait(spi_slave_rx_buf, spi_slave_tx_buf, BUFFER_SIZE);
@@ -85,7 +167,7 @@ void loop()
     }
      Serial.println("");
 
-  }
+  
 
 
   Serial.write("h");
